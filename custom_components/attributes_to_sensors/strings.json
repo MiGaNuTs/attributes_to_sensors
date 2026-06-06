@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Attribute to Sensor",
+        "description": "Select the source entity to expose as individual sensors.",
+        "data": {
+          "entity_id": "Source entity"
+        }
+      }
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Change source entity",
+        "data": {
+          "entity_id": "Source entity"
+        }
+      }
+    }
+  }
+}
