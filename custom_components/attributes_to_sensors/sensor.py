@@ -12,10 +12,8 @@ from . import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# Attributes that are units for another attribute — consumed, not exposed as sensors
 UNIT_SUFFIX = "_unit"
 
-# Fallback unit detection by attribute name when no *_unit sibling exists
 KNOWN_UNITS: dict[str, str] = {
     "temperature": "°C",
     "humidity": "%",
@@ -42,7 +40,6 @@ KNOWN_UNITS: dict[str, str] = {
     "noise": "dB",
 }
 
-# device_class mapping by attribute name
 KNOWN_DEVICE_CLASSES: dict[str, str] = {
     "temperature": "temperature",
     "dew_point": "temperature",
@@ -52,7 +49,6 @@ KNOWN_DEVICE_CLASSES: dict[str, str] = {
     "wind_speed": "wind_speed",
     "wind_gust_speed": "wind_speed",
     "visibility": "distance",
-    "cloud_coverage": None,
     "power": "power",
     "current_power_w": "power",
     "energy": "energy",
@@ -67,13 +63,18 @@ KNOWN_DEVICE_CLASSES: dict[str, str] = {
     "pm10": "pm10",
 }
 
+INTERNAL_ATTRS = {
+    "friendly_name", "icon", "entity_picture",
+    "supported_features", "attribution",
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Create one sensor per attribute of the source entity."""
+    """Create one sensor per attribute of the source entity, plus one for state."""
     entity_id = entry.options.get("entity_id", entry.data.get("entity_id"))
     state = hass.states.get(entity_id)
 
@@ -83,19 +84,35 @@ async def async_setup_entry(
 
     attrs = state.attributes
 
-    # Find all *_unit attributes to use as unit sources, then skip them as sensors
+    # Find *_unit attributes to use as unit sources
     unit_map: dict[str, str] = {}
     for key, value in attrs.items():
         if key.endswith(UNIT_SUFFIX):
             base = key[: -len(UNIT_SUFFIX)]
             unit_map[base] = str(value)
 
-    # Skip attributes that are unit providers or internal HA metadata
-    skip = set(unit_map.keys()) | {
-        f"{k}{UNIT_SUFFIX}" for k in unit_map
-    } | {"friendly_name", "icon", "entity_picture", "supported_features", "attribution"}
+    skip = (
+        set(unit_map.keys())
+        | {f"{k}{UNIT_SUFFIX}" for k in unit_map}
+        | INTERNAL_ATTRS
+    )
 
     sensors = []
+
+    # Special sensor for the entity state itself
+    sensors.append(
+        AttributeSensor(
+            hass=hass,
+            entry=entry,
+            source_entity_id=entity_id,
+            attr_name="state",
+            unit=None,
+            device_class=None,
+            is_state=True,
+        )
+    )
+
+    # One sensor per attribute
     for attr_name, attr_value in attrs.items():
         if attr_name in skip:
             continue
@@ -113,6 +130,7 @@ async def async_setup_entry(
                 attr_name=attr_name,
                 unit=unit,
                 device_class=device_class,
+                is_state=False,
             )
         )
 
@@ -121,7 +139,7 @@ async def async_setup_entry(
 
 
 class AttributeSensor(SensorEntity):
-    """A sensor that mirrors one attribute of a source entity."""
+    """A sensor that mirrors one attribute (or the state) of a source entity."""
 
     def __init__(
         self,
@@ -131,13 +149,17 @@ class AttributeSensor(SensorEntity):
         attr_name: str,
         unit: str | None,
         device_class: str | None,
+        is_state: bool = False,
     ):
         self.hass = hass
         self._entry = entry
         self._source_entity_id = source_entity_id
         self._attr_name_key = attr_name
+        self._is_state = is_state
         self._attr_unique_id = f"{entry.entry_id}_{attr_name}"
-        self._attr_name = f"{source_entity_id.split('.')[1]} {attr_name}".replace("_", " ").title()
+        self._attr_name = (
+            f"{source_entity_id.split('.')[1]} {attr_name}".replace("_", " ").title()
+        )
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
         self._attr_native_value = None
@@ -160,10 +182,13 @@ class AttributeSensor(SensorEntity):
         self.async_write_ha_state()
 
     def _update(self) -> None:
-        """Read attribute value from source entity."""
+        """Read value from source entity."""
         state = self.hass.states.get(self._source_entity_id)
         if state is None or state.state in ("unavailable", "unknown"):
             self._attr_available = False
             return
         self._attr_available = True
-        self._attr_native_value = state.attributes.get(self._attr_name_key)
+        if self._is_state:
+            self._attr_native_value = state.state
+        else:
+            self._attr_native_value = state.attributes.get(self._attr_name_key)
