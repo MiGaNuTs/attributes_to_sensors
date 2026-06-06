@@ -92,8 +92,7 @@ async def async_setup_entry(
             unit_map[base] = str(value)
 
     skip = (
-        set(unit_map.keys())
-        | {f"{k}{UNIT_SUFFIX}" for k in unit_map}
+        {f"{k}{UNIT_SUFFIX}" for k in unit_map}
         | INTERNAL_ATTRS
     )
 
