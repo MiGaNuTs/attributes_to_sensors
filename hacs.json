@@ -1,0 +1,5 @@
+{
+  "name": "Attribute to Sensor",
+  "description": "Exposes every attribute of any entity as individual sensor entities.",
+  "render_readme": true
+}
