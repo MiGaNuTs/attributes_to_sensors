@@ -196,7 +196,7 @@ class AttributeSensor(SensorEntity):
     def _update(self) -> None:
         """Read value from source entity."""
         state = self.hass.states.get(self._source_entity_id)
-        if state is None or state.state in ("unavailable", "unknown"):
+        if state is None or state.state == "unavailable":
             self._attr_available = False
             return
         self._attr_available = True
