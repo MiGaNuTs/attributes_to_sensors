@@ -38,6 +38,8 @@ KNOWN_UNITS: dict[str, str] = {
     "pm25": "µg/m³",
     "pm10": "µg/m³",
     "noise": "dB",
+    "azimuth": "°",
+    "elevation": "°",
 }
 
 KNOWN_DEVICE_CLASSES: dict[str, str] = {
