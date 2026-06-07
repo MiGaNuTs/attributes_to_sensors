@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -63,6 +63,10 @@ KNOWN_DEVICE_CLASSES: dict[str, str] = {
     "pm10": "pm10",
 }
 
+
+TOTAL_INCREASING_UNITS = {"kWh", "Wh", "MWh", "m³", "L", "gal", "km", "mi", "GB", "MB", "TB"}
+TOTAL_UNITS = {"€", "$", "£", "CHF"}
+
 INTERNAL_ATTRS = {
     "friendly_name", "icon", "entity_picture",
     "supported_features", "attribution",
@@ -120,6 +124,12 @@ async def async_setup_entry(
 
         unit = unit_map.get(attr_name) or KNOWN_UNITS.get(attr_name)
         device_class = KNOWN_DEVICE_CLASSES.get(attr_name)
+        state_class = (
+            SensorStateClass.TOTAL_INCREASING if unit in TOTAL_INCREASING_UNITS
+            else SensorStateClass.TOTAL if unit in TOTAL_UNITS
+            else SensorStateClass.MEASUREMENT if unit is not None
+            else None
+        )
 
         sensors.append(
             AttributeSensor(
@@ -129,6 +139,7 @@ async def async_setup_entry(
                 attr_name=attr_name,
                 unit=unit,
                 device_class=device_class,
+                state_class=state_class,
                 is_state=False,
             )
         )
@@ -148,6 +159,7 @@ class AttributeSensor(SensorEntity):
         attr_name: str,
         unit: str | None,
         device_class: str | None,
+        state_class=None,
         is_state: bool = False,
     ):
         self.hass = hass
@@ -161,6 +173,7 @@ class AttributeSensor(SensorEntity):
         )
         self._attr_native_unit_of_measurement = unit
         self._attr_device_class = device_class
+        self._attr_state_class = state_class
         self._attr_native_value = None
         self._update()
 
