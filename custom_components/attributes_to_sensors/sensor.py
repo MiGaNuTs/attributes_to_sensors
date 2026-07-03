@@ -84,10 +84,40 @@ async def async_setup_entry(
     entity_id = entry.options.get("entity_id", entry.data.get("entity_id"))
     state = hass.states.get(entity_id)
 
-    if state is None:
-        _LOGGER.warning("Source entity %s not found at setup time.", entity_id)
+    if state is not None:
+        _build_and_add_sensors(hass, entry, entity_id, state, async_add_entities)
         return
 
+    # Source entity not ready yet (typical at HA startup if it belongs to an
+    # integration that loads later). Wait for it to appear instead of giving
+    # up, then build the sensors once it does.
+    _LOGGER.debug(
+        "Source entity %s not available yet, waiting for it to appear.",
+        entity_id,
+    )
+
+    @callback
+    def _source_ready(event) -> None:
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+        remove_listener()
+        _build_and_add_sensors(hass, entry, entity_id, new_state, async_add_entities)
+
+    remove_listener = async_track_state_change_event(
+        hass, [entity_id], _source_ready
+    )
+    entry.async_on_unload(remove_listener)
+
+
+def _build_and_add_sensors(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    entity_id: str,
+    state,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Build the AttributeSensor entities from a resolved source state."""
     attrs = state.attributes
 
     # Find *_unit attributes to use as unit sources
